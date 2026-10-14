@@ -11,57 +11,34 @@
  */
 
 #include <app_config.h>
+#include <DisplaySerial/DisplaySerial.h>
+#include <EnergyMeter/EnergyMeter.h>
 
 /**
- * @brief Constant definitions for task stack sizes and priorities
+ * @brief Setup function
  */
-constexpr int LISTENER_STACK = 2048;
-constexpr int HANDLER_STACK  = 4096;
-
-constexpr UBaseType_t PRIOR_LISTENER = 1;
-constexpr UBaseType_t PRIOR_HANDLER  = 2;
-
-/**
- * @brief Global RTOS handles and queues
- */
-TaskHandle_t listener_t = nullptr;
-TaskHandle_t handler_t  = nullptr;
-
-/**
- * @brief Task function declarations
- */
-void listenerTask(void* pvParameters);
-void handlerTask(void* pvParameters);
-
 void setup() {
   Serial.begin(115200);
 
   DEBUG_PRINTLN("Setting up the Electricity Usage Monitor...");
 
-  configASSERT(xTaskCreatePinnedToCore(listenerTask, "Listener Task", LISTENER_STACK, nullptr, PRIOR_LISTENER, &listener_t, 0) == pdPASS);
+  pinMode(LED_PIN, OUTPUT);
+
+  configASSERT((data_q = xQueueCreate(3, sizeof(bool))) != nullptr);
   delay(50);
-  configASSERT(xTaskCreatePinnedToCore(handlerTask, "Handler Task", HANDLER_STACK, nullptr, PRIOR_HANDLER, &handler_t, 0) == pdPASS);
+  configASSERT((data_m = xSemaphoreCreateMutex()) != nullptr);
+  delay(50);
+  configASSERT(xTaskCreatePinnedToCore(EnergyMeterTask::run, "Energy Meter Task", ENERGY_METER_STACK, nullptr, PRIOR_ENERGY_METER, &energyMeter_t, 0) == pdPASS);
+  delay(50);
+  configASSERT(xTaskCreatePinnedToCore(DisplaySerialTask::run, "Display Serial Task", DISPLAY_SERIAL_STACK, nullptr, PRIOR_DISPLAY_SERIAL, &displaySerial_t, 0) == pdPASS);
   delay(50);
 
   DEBUG_PRINTLN("Setup complete. Tasks are running.");
 }
 
+/**
+ * @brief Deletes the loop task to allow FreeRTOS tasks to run independently.
+ */
 void loop() {
   vTaskDelete(NULL);
-}
-
-void listenerTask(void* pvParameters) {
-  TickType_t lastWakeTime = xTaskGetTickCount();
-  while (true) {
-    DEBUG_PRINTLN("Listener Task: Listening for data...");
-    vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(cfg::LOOP_INTERNAL_TESTING));
-  }
-}
-
-void handlerTask(void* pvParameters) {
-  TickType_t lastWakeTime = xTaskGetTickCount();
-  while (true) {
-    DEBUG_PRINTLN("Handler Task: Handling data...");
-    vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(100));
-  }
 }
